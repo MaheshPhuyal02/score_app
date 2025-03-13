@@ -1,12 +1,14 @@
 package com.tm.score_app.pages
 
-import BluetoothService
 import DatabaseManager
-import DeviceType
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.RequiresPermission
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -42,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,18 +55,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.tm.score_app.R
 import com.tm.score_app.models.Device
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 class ScanDeviceActivity : ComponentActivity() {
     // Initialize services
@@ -77,6 +79,11 @@ class ScanDeviceActivity : ComponentActivity() {
         bluetoothService = BluetoothService(this)
         databaseManager = DatabaseManager(this)
 
+        // Check for required permissions before proceeding
+        if (!hasRequiredPermissions()) {
+            requestPermissions()
+        }
+
         setContent {
             MaterialTheme {
                 BluetoothScannerScreen(
@@ -88,9 +95,60 @@ class ScanDeviceActivity : ComponentActivity() {
         }
     }
 
+    private fun hasRequiredPermissions(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ),
+                PERMISSION_REQUEST_CODE
+            )
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+        deviceId: Int
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions as Array<String>, grantResults)
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                // Permissions granted, we're good to go
+            } else {
+
+                Toast.makeText(this, "Bluetooth scanning requires permissions", Toast.LENGTH_LONG).show()
+                finish()
+            }
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     override fun onDestroy() {
         super.onDestroy()
         bluetoothService.cleanup()
+    }
+
+    companion object {
+        private const val PERMISSION_REQUEST_CODE = 123
     }
 }
 
@@ -103,9 +161,12 @@ fun BluetoothScannerScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // State for device scanning
-    var isScanning by remember { mutableStateOf(true) }
-    val foundDevices = remember { mutableStateListOf<Device>() }
+    // Collect real scanning state from BluetoothService
+    val isScanning by bluetoothService.isScanning.collectAsState()
+
+    // Collect discovered devices from BluetoothService
+    val discoveredDevices by bluetoothService.discoveredDevicesFlow.collectAsState()
+
     val existingDevices = remember { mutableStateListOf<Device>() }
     var selectedDevice by remember { mutableStateOf<Device?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -113,45 +174,15 @@ fun BluetoothScannerScreen(
     // Load existing devices from database
     LaunchedEffect(Unit) {
         existingDevices.clear()
-        existingDevices.addAll(databaseManager.getDeviceList(DeviceType.WATCH))
+        existingDevices.addAll(databaseManager.getDeviceList(
+
+        ))
     }
 
     // Start scanning for devices when the screen loads
-    DisposableEffect(key1 = bluetoothService) {
-        // Simulate device discovery with a coroutine
-        val job = coroutineScope.launch {
-            try {
-                // Start scanning
-                isScanning = true
-
-                // Clear previous results
-                foundDevices.clear()
-
-                // Scan for devices (this would normally call bluetoothService.startDiscovery())
-                // For this example, we'll simulate finding devices over time
-                delay(1000) // Wait for initial scan
-
-                // Simulate devices being found
-                // In a real implementation, you'd get these from BluetoothService's discovery results
-                simulateDeviceDiscovery(foundDevices, bluetoothService)
-
-                // Continue scanning for a bit
-                delay(3000)
-
-                // Stop scanning
-                isScanning = false
-
-            } catch (e: Exception) {
-                Toast.makeText(context, "Error scanning: ${e.message}", Toast.LENGTH_SHORT).show()
-                isScanning = false
-            }
-        }
-
-        // When the composable leaves composition, cancel scanning
-        onDispose {
-            job.cancel()
-            isScanning = false
-        }
+    LaunchedEffect(Unit) {
+        // Start actual Bluetooth scanning
+        bluetoothService.scanDevices()
     }
 
     // Add device dialog
@@ -273,7 +304,7 @@ fun BluetoothScannerScreen(
                             .weight(1f)
                     ) {
                         // Show only devices that are not already in the database
-                        val devicesToShow = foundDevices.filter { foundDevice ->
+                        val devicesToShow = discoveredDevices.filter { foundDevice ->
                             existingDevices.none { it.deviceId == foundDevice.deviceId }
                         }
 
@@ -293,8 +324,7 @@ fun BluetoothScannerScreen(
                         items(devicesToShow) { device ->
                             DeviceItem(
                                 deviceName = device.deviceName,
-                                deviceType =
-                                    if (device.deviceType == DeviceType.WATCH) "Watch" else "${calculateDistance(device)} m",
+                                deviceType = if (device.deviceType == DeviceType.WATCH) "Watch" else calculateDistance(device),
                                 iconColor = getDeviceColor(device),
                                 isWatch = device.deviceType == DeviceType.WATCH,
                                 onClick = {
@@ -314,14 +344,8 @@ fun BluetoothScannerScreen(
                         TextButton(
                             onClick = {
                                 coroutineScope.launch {
-                                    isScanning = true
-                                    foundDevices.clear()
-
-                                    // Simulate new scan
-                                    delay(1000)
-                                    simulateDeviceDiscovery(foundDevices, bluetoothService)
-                                    delay(2000)
-                                    isScanning = false
+                                    // Start real Bluetooth scanning again
+                                    bluetoothService.scanDevices()
                                 }
                             },
                             modifier = Modifier
@@ -426,73 +450,12 @@ private fun getDeviceColor(device: Device): Color {
 }
 
 private fun calculateDistance(device: Device): String {
-    // In a real implementation, this would calculate the actual distance based on signal strength
-    // For this demo, return a simulated distance
-    val hash = device.deviceId.hashCode()
-    val distance = (hash % 100) / 10.0
-    return String.format("%.1f", distance)
-}
-
-// Function to simulate device discovery
-// In a real app, this would be replaced by actual BluetoothService discovery callbacks
-private suspend fun simulateDeviceDiscovery(
-    deviceList: MutableList<Device>,
-    bluetoothService: BluetoothService
-) {
-    val deviceTypes = listOf(DeviceType.WATCH, DeviceType.PHONE)
-    val deviceNames = listOf(
-        "Pixel Watch 2",
-        "Samsung Galaxy Watch",
-        "iPhone 15",
-        "Pixel 8",
-        "Samsung S23",
-        "Xiaomi Mi 12",
-        "OnePlus 11"
-    )
-
-    // Simulate finding 2-5 devices
-    val numDevices = Random.nextInt(2, 6)
-
-    for (i in 0 until numDevices) {
-        // Simulate device discovery delay
-        delay(800)
-
-        val deviceType = deviceTypes[Random.nextInt(0, deviceTypes.size)]
-        val deviceName = deviceNames[Random.nextInt(0, deviceNames.size)]
-        val deviceId = "device_${System.currentTimeMillis()}_${Random.nextInt(1000, 9999)}"
-
-        val device = Device(
-            deviceId = deviceId,
-            deviceName = deviceName,
-            deviceType = deviceType,
-            deviceStatus = "disconnected",
-            score = 0.0,
-            heartRate = 0.0,
-            isMine = false,
-            isPaired = false,
-            isSynced = false,
-            color = getDeviceColor(
-                Device(
-                    deviceId = deviceId,
-                    deviceName = deviceName,
-                    deviceType = deviceType,
-                    deviceStatus = "disconnected",
-                    score = 0.0,
-                    heartRate = 0.0,
-                    isMine = false,
-                    isPaired = false,
-                    isSynced = false,
-                    color = 0,
-                    isConnected = false,
-                    address = "adfafd"
-
-                )
-            ).toArgb(),
-            isConnected = false,
-            address = "adfafd"
-        )
-
-        deviceList.add(device)
+    // For real device, use the RSSI (signal strength) to approximate distance
+    // This is just a placeholder for now
+    return if (device.deviceId.isNotEmpty()) {
+        val firstDigit = device.deviceId.hashCode().toString().first().toString().toIntOrNull() ?: 1
+        String.format("%.1f m", firstDigit.toDouble() + (device.deviceId.hashCode() % 10) / 10.0)
+    } else {
+        "Unknown"
     }
 }
-

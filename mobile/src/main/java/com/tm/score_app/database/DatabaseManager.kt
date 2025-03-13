@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import com.tm.score_app.models.Device
+import com.tm.score_app.pages.DeviceType
 
 
 class DatabaseManager(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
@@ -83,7 +84,7 @@ class DatabaseManager(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         } catch (e: Exception) {
             Log.e(TAG, "Error adding device", e)
         } finally {
-            db.close()
+            // db.close()
         }
     }
 
@@ -97,7 +98,7 @@ class DatabaseManager(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         } catch (e: Exception) {
             Log.e(TAG, "Error removing device", e)
         } finally {
-            db.close()
+            // db.close()
         }
     }
 
@@ -115,7 +116,7 @@ class DatabaseManager(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         } catch (e: Exception) {
             Log.e(TAG, "Error updating score", e)
         } finally {
-            db.close()
+            // db.close()
         }
     }
 
@@ -133,16 +134,22 @@ class DatabaseManager(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         } catch (e: Exception) {
             Log.e(TAG, "Error updating heart rate", e)
         } finally {
-            db.close()
+            // db.close()
         }
     }
 
     // Get list of all devices
     fun getDeviceList(
-        deviceType: DeviceType
+        deviceType: DeviceType? = null
     ): ArrayList<Device> {
         val deviceList = ArrayList<Device>()
-        val selectQuery = "SELECT * FROM $TABLE_DEVICES WHERE $COLUMN_DEVICE_TYPE = '${deviceType.toString()}'"
+
+        val selectQuery = "SELECT * FROM $TABLE_DEVICES"
+
+        if(deviceType != null) {
+            selectQuery.plus(" WHERE $COLUMN_DEVICE_TYPE = '${deviceType.toString()}'")
+        }
+
         val db = this.readableDatabase
         var cursor: Cursor? = null
 
@@ -172,7 +179,7 @@ class DatabaseManager(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             Log.e(TAG, "Error getting device list", e)
         } finally {
             cursor?.close()
-            db.close()
+            // db.close()
         }
 
         return deviceList
@@ -208,7 +215,7 @@ class DatabaseManager(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             Log.e(TAG, "Error getting my watch", e)
         } finally {
             cursor?.close()
-            db.close()
+            // db.close()
         }
 
         return myWatch

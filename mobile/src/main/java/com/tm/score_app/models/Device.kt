@@ -1,6 +1,6 @@
 package com.tm.score_app.models
 
-import DeviceType
+import com.tm.score_app.pages.DeviceType
 
 data class Device(
     var deviceId: String,

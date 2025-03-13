@@ -1,7 +1,6 @@
 package com.tm.score_app.pages.fragments
 
 import DatabaseManager
-import DeviceType
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tm.score_app.R
+import com.tm.score_app.pages.DeviceType
 import com.tm.score_app.pages.ScanDeviceActivity
 
 data class ConnectedDevice(
@@ -120,11 +120,10 @@ private fun loadConnectedDevices(
     devicesList.clear()
 
     // Get all devices from the database
-    val allDevices = databaseManager.getDeviceList(DeviceType.WATCH)
+    val allDevices = databaseManager.getDeviceList(DeviceType.PHONE)
 
     // Filter for only connected devices and convert to UI model
     val connectedDevices = allDevices
-        .filter { it.deviceStatus == "connected" }
         .map { device ->
             ConnectedDevice(
                 name = device.deviceName,
