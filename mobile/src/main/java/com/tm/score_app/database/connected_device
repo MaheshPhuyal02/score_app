@@ -1,0 +1,49 @@
+class DatabaseManager: related SqlLite{
+
+
+   // all initialized data
+   // structure:
+
+    Column Device{
+
+    String deviceName;
+    String deviceType;
+    String deviceID;
+    String deviceStatus;
+    double score;
+    double heartRate;
+    bool isMine;
+    bool isPaired;
+    bool isSynced;
+    int color;
+    }
+
+
+    // all methods
+
+    addDevice(Device device){
+
+    }
+
+    removeDevice(Device device){
+
+    }
+
+    updateScore(Device device){
+
+    }
+
+    updateHeartRate(String deviceId, double heartRate){
+
+    }
+
+
+    getDeviceList(){
+
+    }
+
+    getMyWatch(){
+
+    }
+
+}

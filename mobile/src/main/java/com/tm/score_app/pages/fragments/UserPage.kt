@@ -1,5 +1,7 @@
 package com.tm.score_app.pages.fragments
 
+import DatabaseManager
+import DeviceType
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
@@ -19,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -27,24 +28,37 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tm.score_app.R
 import com.tm.score_app.pages.ScanDeviceActivity
 
-
-data class User(
+data class ConnectedDevice(
     val name: String,
     val score: Int,
-    val rating: Double,
-    val color: Color
+    val color: Color,
+    val isWatch: Boolean
 )
 
 @Composable
-fun UsersList(users: List<User>, context: Context) {
+fun ConnectedDevicesList(context: Context) {
+    val databaseManager = remember { DatabaseManager(context) }
+    val devices = remember { mutableStateListOf<ConnectedDevice>() }
+
+    // Load connected devices from database when the screen appears
+    LaunchedEffect(key1 = Unit) {
+        loadConnectedDevices(databaseManager, devices)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -52,16 +66,31 @@ fun UsersList(users: List<User>, context: Context) {
             .padding(16.dp)
     ) {
         Text(
-            text = "Users",
+            text = "Connected Devices",
             color = Color.White,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        LazyColumn {
-            items(users) { user ->
-                UserCard(user)
+        if (devices.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No devices connected",
+                    color = Color.Gray,
+                    fontSize = 16.sp
+                )
+            }
+        } else {
+            LazyColumn {
+                items(devices) { device ->
+                    DeviceCard(device)
+                }
             }
         }
 
@@ -69,9 +98,7 @@ fun UsersList(users: List<User>, context: Context) {
 
         Button(
             onClick = {
-
                 context.startActivity(Intent(context, ScanDeviceActivity::class.java))
-
             },
             colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
             modifier = Modifier.align(Alignment.End),
@@ -79,13 +106,40 @@ fun UsersList(users: List<User>, context: Context) {
         ) {
             Icon(Icons.Default.Add, contentDescription = "Add", tint = Color.White)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Add users", color = Color.White)
+            Text(text = "Add device", color = Color.White)
         }
     }
 }
 
+// Function to load connected devices from the database
+private fun loadConnectedDevices(
+    databaseManager: DatabaseManager,
+    devicesList: SnapshotStateList<ConnectedDevice>
+) {
+    // Clear the current list
+    devicesList.clear()
+
+    // Get all devices from the database
+    val allDevices = databaseManager.getDeviceList(DeviceType.WATCH)
+
+    // Filter for only connected devices and convert to UI model
+    val connectedDevices = allDevices
+        .filter { it.deviceStatus == "connected" }
+        .map { device ->
+            ConnectedDevice(
+                name = device.deviceName,
+                score = device.score.toInt(),
+                color = Color(device.color),
+                isWatch = device.deviceType == DeviceType.WATCH
+            )
+        }
+
+    // Add all connected devices to our list
+    devicesList.addAll(connectedDevices)
+}
+
 @Composable
-fun UserCard(user: User) {
+fun DeviceCard(device: ConnectedDevice) {
     Card(
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
@@ -102,12 +156,14 @@ fun UserCard(user: User) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(user.color, shape = CircleShape),
+                    .background(device.color, shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Default.Person,
-                    contentDescription = "User Icon",
+                    painter = painterResource(
+                        id = if (device.isWatch) R.drawable.watch_search else R.drawable.phone
+                    ),
+                    contentDescription = "Device Icon",
                     tint = Color.Black
                 )
             }
@@ -115,37 +171,32 @@ fun UserCard(user: User) {
             Spacer(modifier = Modifier.width(12.dp))
 
             Text(
-                text = user.name,
+                text = device.name,
                 color = Color.White,
                 fontSize = 16.sp,
                 modifier = Modifier.weight(1f)
             )
 
-            Text(
-                text = if (user.score == 0) "❌ 0" else "${user.score}",
-                color = if (user.score == 0) Color.Red else Color.Green,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Text(
-                text = "${user.rating}",
-                color = Color.White,
-                fontSize = 16.sp
-            )
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = if (device.score > 0) Color(0xFF1A5E1A) else Color(0xFF5E1A1A),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = device.score.toString(),
+                    color = if (device.score > 0) Color.Green else Color.Red,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
 
 @Composable
 fun UserPage(context: Context) {
-    val users = listOf(
-        User("User 1", 2, 7.0, Color(0xFF66FF66)),
-        User("User 2", 8, 7.75, Color(0xFF00FFFF)),
-        User("User 3", 5, 0.75, Color(0xFFFF6600)),
-        User("User 4", 0, 0.0, Color(0xFF9933FF))
-    )
-    UsersList(users, context)
+    ConnectedDevicesList(context)
 }
