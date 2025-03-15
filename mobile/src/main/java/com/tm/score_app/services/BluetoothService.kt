@@ -191,6 +191,21 @@ class BluetoothService(val context: Context) {
         return _heartRate.value
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun pairDevice(deviceId: String): Boolean {
+
+
+
+
+        val device = bluetoothAdapter?.getRemoteDevice(deviceId)
+
+        if(device!!.bondState == BluetoothDevice.BOND_BONDED){
+            return true
+        }
+
+        return device?.createBond() ?: false
+    }
+
     /**
      * Scan for Bluetooth devices
      */
@@ -220,6 +235,56 @@ class BluetoothService(val context: Context) {
         val deviceFoundReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when(intent.action) {
+
+                    BluetoothDevice.ACTION_NAME_CHANGED->{
+
+
+                        val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                        }
+                        println("Device name changed ::: ${device}")
+
+                        device?.let { bluetoothDevice ->
+                            // Get device name (safely)
+                            val deviceName = try {
+                                bluetoothDevice.name ?: "Unknown Device"
+                            } catch (e: SecurityException) {
+                                "Unknown Device"
+                            }
+
+                            // Get device address (safely)
+                            val deviceAddress = try {
+                                bluetoothDevice.address
+                            } catch (e: SecurityException) {
+                                ""
+                            }
+
+                            // Create Device object
+                            val newDevice = Device(
+                                deviceId = deviceAddress,
+                                deviceName = deviceName,
+                                deviceType = guessDeviceType(deviceName),
+                                deviceStatus = "disconnected",
+                                score = 0.0,
+                                heartRate = 0.0,
+                                isMine = false,
+                                isPaired = false,
+                                isSynced = false,
+                                color = generateColorForDevice(deviceAddress)
+                            )
+
+                            // Add to discovered devices if not already there
+                            if (discoveredDevices.none { it.deviceId == deviceAddress }) {
+                                discoveredDevices.add(newDevice)
+                                // Notify listeners about the new device
+                                _discoveredDevicesFlow.value = discoveredDevices.toList()
+                            }
+                        }
+                    }
+
                     BluetoothDevice.ACTION_FOUND -> {
                         // Get the BluetoothDevice from the Intent
                         val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -284,6 +349,7 @@ class BluetoothService(val context: Context) {
         // Register for broadcasts when a device is found or discovery finished
         val filter = IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_FOUND)
+            addAction(BluetoothDevice.ACTION_NAME_CHANGED)
             addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         }
 
@@ -328,6 +394,8 @@ class BluetoothService(val context: Context) {
             _isScanning.value = false
         }
     }
+
+
 
     /**
      * Private method to listen to incoming data

@@ -35,14 +35,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -85,12 +83,27 @@ class ScanDeviceActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme {
-                BluetoothScannerScreen(
-                    bluetoothService = bluetoothService,
-                    databaseManager = databaseManager,
-                    onCancel = { finish() }
-                )
+            MaterialTheme @androidx.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) {
+                if (ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    // TODO: Consider calling
+                    //    ActivityCompat#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for ActivityCompat#requestPermissions for more details.
+
+                } else {
+                    BluetoothScannerScreen(
+                        bluetoothService = bluetoothService,
+                        databaseManager = databaseManager,
+                        onCancel = { finish() }
+                    )
+                }
             }
         }
     }
@@ -152,6 +165,7 @@ class ScanDeviceActivity : ComponentActivity() {
     }
 }
 
+@RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
 @Composable
 fun BluetoothScannerScreen(
     bluetoothService: BluetoothService,
@@ -185,36 +199,57 @@ fun BluetoothScannerScreen(
         bluetoothService.scanDevices()
     }
 
-    // Add device dialog
+
+
     if (showAddDialog && selectedDevice != null) {
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text("Add Device") },
-            text = { Text("Do you want to add ${selectedDevice?.deviceName} to your devices?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    selectedDevice?.let {
-                        // Add to database
-                        databaseManager.addDevice(it)
 
-                        // Add to list of existing devices
-                        if (!existingDevices.contains(it)) {
-                            existingDevices.add(it)
-                        }
+       val paird =  bluetoothService.pairDevice(selectedDevice!!.deviceId);
 
-                        Toast.makeText(context, "Device added successfully", Toast.LENGTH_SHORT).show()
-                    }
-                    showAddDialog = false
-                }) {
-                    Text("Add")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
-                    Text("Cancel")
-                }
+        if(paird){
+
+
+            databaseManager.addDevice(selectedDevice!!)
+
+            // Add to list of existing devices
+            if (!existingDevices.contains(selectedDevice)) {
+                existingDevices.add(selectedDevice!!)
             }
-        )
+
+            Toast.makeText(context, "Device added successfully", Toast.LENGTH_SHORT).show()
+        }else{
+            Toast.makeText(context, "Pairing failed.", Toast.LENGTH_SHORT).show()
+        }
+        showAddDialog = false
+
+
+//        AlertDialog(
+//            onDismissRequest = { showAddDialog = false },
+//            title = { Text("Add Device") },
+//            text = { Text("Do you want to add ${selectedDevice?.deviceName} to your devices?") },
+//            confirmButton = {
+//                TextButton(onClick = {
+//                    selectedDevice?.let {
+//                        // Add to database
+//                        databaseManager.addDevice(it)
+//
+//                        // Add to list of existing devices
+//                        if (!existingDevices.contains(it)) {
+//                            existingDevices.add(it)
+//                        }
+//
+//                        Toast.makeText(context, "Device added successfully", Toast.LENGTH_SHORT).show()
+//                    }
+//                    showAddDialog = false
+//                }) {
+//                    Text("Add")
+//                }
+//            },
+//            dismissButton = {
+//                TextButton(onClick = { showAddDialog = false }) {
+//                    Text("Cancel")
+//                }
+//            }
+//        )
     }
 
     Box(
